@@ -51,6 +51,7 @@ export class TabBar {
 			cls: "oterm-tab-label",
 			text: entry.name,
 		});
+		labelEl.setAttribute("title", "Double-click to rename");
 
 		labelEl.addEventListener("dblclick", (e) => {
 			e.stopPropagation();
@@ -58,7 +59,9 @@ export class TabBar {
 		});
 
 		tabEl.addEventListener("click", () => {
-			this.manager.switchTo(entry.id);
+			if (entry.id !== this.manager.getActiveId()) {
+				this.manager.switchTo(entry.id);
+			}
 		});
 
 		if (this.manager.count() > 1) {

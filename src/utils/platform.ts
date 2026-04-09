@@ -25,7 +25,12 @@ export function detectShell(): ShellInfo {
 }
 
 function detectWindowsShell(): ShellInfo {
-	// Prefer PowerShell 7+ (pwsh), then Windows PowerShell, then cmd
+	// Prefer WSL (Ubuntu/Linux shell) when available
+	if (canResolveShell("wsl.exe")) {
+		return { shell: "wsl.exe", args: [] };
+	}
+
+	// Fall back to PowerShell 7+ (pwsh), then Windows PowerShell
 	const pwshPaths = [
 		path.join(
 			process.env["ProgramFiles"] ?? "C:\\Program Files",
@@ -95,6 +100,7 @@ export function buildWSLCommand(
 	if (distro) {
 		args.push("-d", distro);
 	}
+	// Let WSL use its default login shell (don't force zsh — not all distros have it)
 	return { shell: "wsl.exe", args };
 }
 
