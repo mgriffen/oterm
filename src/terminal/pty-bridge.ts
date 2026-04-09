@@ -48,6 +48,8 @@ export function spawnPty(
 	// Set TERM for proper color/capability detection
 	env["TERM"] = TERM_TYPE;
 	env["COLORTERM"] = COLOR_TERM;
+	// Let shell configs detect oterm (e.g., to skip tmux auto-attach)
+	env["OTERM"] = "1";
 
 	const ptyOptions: Record<string, unknown> = {
 		name: TERM_TYPE,
