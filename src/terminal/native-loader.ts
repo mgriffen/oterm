@@ -99,6 +99,7 @@ async function downloadAndExtract(
 	triple: string
 ): Promise<void> {
 	const notice = new Notice("oterm: downloading terminal binary...", 0);
+	const targetDir = path.join(pluginDir, NATIVE_DIR_NAME, triple);
 
 	try {
 		const version = await getPluginVersion(pluginDir);
@@ -132,7 +133,6 @@ async function downloadAndExtract(
 
 		// Extract zip
 		notice.setMessage("oterm: installing terminal binary...");
-		const targetDir = path.join(pluginDir, NATIVE_DIR_NAME, triple);
 
 		// Clean up any partial previous extraction
 		if (await fileExists(targetDir)) {
@@ -185,6 +185,7 @@ function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
 
 				zipfile.openReadStream(entry, (streamErr, readStream) => {
 					if (streamErr || !readStream) {
+						zipfile.close();
 						reject(streamErr ?? new Error("Failed to read zip entry"));
 						return;
 					}
@@ -196,7 +197,10 @@ function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
 						zipfile.readEntry();
 					});
 
-					writeStream.on("error", reject);
+					writeStream.on("error", (e) => {
+						zipfile.close();
+						reject(e);
+					});
 				});
 			});
 
@@ -305,18 +309,20 @@ function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
 			}
 
 			let totalBytes = 0;
+			let settled = false;
 			const chunks: Buffer[] = [];
 			res.on("data", (chunk: Buffer) => {
 				totalBytes += chunk.length;
-				if (totalBytes > MAX_DOWNLOAD_BYTES) {
+				if (totalBytes > MAX_DOWNLOAD_BYTES && !settled) {
+					settled = true;
 					res.destroy();
 					reject(new Error(`oterm: download exceeds ${MAX_DOWNLOAD_BYTES / 1024 / 1024}MB limit — aborting`));
 					return;
 				}
 				chunks.push(chunk);
 			});
-			res.on("end", () => resolve(Buffer.concat(chunks)));
-			res.on("error", reject);
+			res.on("end", () => { if (!settled) resolve(Buffer.concat(chunks)); });
+			res.on("error", (e) => { if (!settled) { settled = true; reject(e); } });
 		}).on("error", reject);
 	});
 }
