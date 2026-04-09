@@ -5,6 +5,7 @@ import { loadNodePty } from "./native-loader";
 import { detectShell, buildWSLCommand, resolveDefaultCwd } from "../utils/platform";
 import { TabBar } from "../ui/tab-bar";
 import { SearchBar } from "../ui/search-bar";
+import { ConfirmModal } from "../ui/confirm-modal";
 import type OtermPlugin from "../main";
 
 export class TerminalView extends ItemView {
@@ -70,6 +71,17 @@ export class TerminalView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		const hasActive = await this.manager.hasActiveProcesses();
+		if (hasActive) {
+			const confirmed = await new ConfirmModal(
+				this.app,
+				"Close terminal?",
+				"One or more terminal sessions have running processes. Closing will terminate them."
+			).openAndWait();
+
+			if (!confirmed) return;
+		}
+
 		this.resizeObserver?.disconnect();
 		this.resizeObserver = null;
 		this.searchBar?.destroy();
