@@ -90,7 +90,7 @@ jobs:
             fi
           done
           cd staging
-          zip ../node-pty-${{ matrix.triple }}.zip *
+          7z a ../node-pty-${{ matrix.triple }}.zip *
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
