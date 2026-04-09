@@ -15,7 +15,8 @@ credentials.json
 *.pem
 *.key
 
-# Output / generated
+# Build output (CI builds for releases)
+main.js
 output/
 dist/
 build/

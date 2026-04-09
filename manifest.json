@@ -1,0 +1,10 @@
+{
+	"id": "oterm",
+	"name": "oterm",
+	"version": "0.1.0",
+	"minAppVersion": "1.4.11",
+	"description": "Full terminal emulator for Obsidian — PowerShell, WSL, oh-my-zsh, tmux, powerlevel10k.",
+	"author": "mgriffen",
+	"authorUrl": "https://github.com/mgriffen",
+	"isDesktopOnly": true
+}

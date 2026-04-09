@@ -98,8 +98,34 @@ jobs:
           name: node-pty-${{ matrix.triple }}
           path: node-pty-${{ matrix.triple }}.zip
 
+  build-plugin:
+    runs-on: ubuntu-latest
+    name: Build plugin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build plugin
+        run: node esbuild.config.mjs production
+
+      - name: Upload plugin assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-assets
+          path: |
+            main.js
+            manifest.json
+            styles.css
+
   release:
-    needs: build
+    needs: [build, build-plugin]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -136,4 +162,7 @@ jobs:
           files: |
             artifacts/*.zip
             artifacts/checksums.json
+            artifacts/main.js
+            artifacts/manifest.json
+            artifacts/styles.css
           generate_release_notes: true
