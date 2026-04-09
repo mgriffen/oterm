@@ -1,5 +1,6 @@
-import { setIcon, Notice } from "obsidian";
+import { App, setIcon } from "obsidian";
 import { TerminalManager, SessionEntry } from "../terminal/terminal-manager";
+import { ConfirmModal } from "./confirm-modal";
 
 export class TabBar {
 	private containerEl: HTMLElement;
@@ -7,7 +8,8 @@ export class TabBar {
 	constructor(
 		parentEl: HTMLElement,
 		private manager: TerminalManager,
-		private onNewTab: () => void
+		private onNewTab: () => void,
+		private app: App
 	) {
 		this.containerEl = parentEl.createDiv({ cls: "oterm-tab-bar" });
 
@@ -66,10 +68,12 @@ export class TabBar {
 				e.stopPropagation();
 				const hasActive = await this.manager.sessionHasActiveProcess(entry.id);
 				if (hasActive) {
-					new Notice(
-						"oterm: session has running processes — closing anyway.",
-						3000
-					);
+					const confirmed = await new ConfirmModal(
+						this.app,
+						"Close terminal?",
+						"This terminal session has running processes. Close anyway?"
+					).openAndWait();
+					if (!confirmed) return;
 				}
 				this.manager.closeSession(entry.id);
 			});

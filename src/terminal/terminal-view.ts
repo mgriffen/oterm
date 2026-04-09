@@ -5,7 +5,6 @@ import { loadNodePty } from "./native-loader";
 import { detectShell, buildWSLCommand, resolveDefaultCwd } from "../utils/platform";
 import { TabBar } from "../ui/tab-bar";
 import { SearchBar } from "../ui/search-bar";
-import { ConfirmModal } from "../ui/confirm-modal";
 import type OtermPlugin from "../main";
 
 export class TerminalView extends ItemView {
@@ -47,7 +46,7 @@ export class TerminalView extends ItemView {
 
 			this.tabBar = new TabBar(container, this.manager, () => {
 				this.createNewSession();
-			});
+			}, this.app);
 
 			this.searchBar = new SearchBar(container, () => {
 				return this.manager.getActive()?.session.addons?.search ?? null;
@@ -73,13 +72,7 @@ export class TerminalView extends ItemView {
 	async onClose(): Promise<void> {
 		const hasActive = await this.manager.hasActiveProcesses();
 		if (hasActive) {
-			const confirmed = await new ConfirmModal(
-				this.app,
-				"Close terminal?",
-				"One or more terminal sessions have running processes. Closing will terminate them."
-			).openAndWait();
-
-			if (!confirmed) return;
+			new Notice("oterm: terminal sessions with running processes were closed.", 5000);
 		}
 
 		this.resizeObserver?.disconnect();

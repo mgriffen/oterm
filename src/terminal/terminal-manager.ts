@@ -87,8 +87,8 @@ export class TerminalManager {
 		}
 		this.sessions.clear();
 		this.activeId = null;
-		this.onChangeCallbacks.length = 0;
 		this.notifyChange();
+		this.onChangeCallbacks.length = 0;
 	}
 
 	getActive(): SessionEntry | null {

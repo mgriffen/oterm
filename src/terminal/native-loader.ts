@@ -2,7 +2,6 @@ import { Notice } from "obsidian";
 import { createHash } from "crypto";
 import { access, readFile, writeFile, mkdir } from "fs/promises";
 import * as https from "https";
-import * as http from "http";
 import * as path from "path";
 import { getPlatformTriple } from "../utils/platform";
 
@@ -123,7 +122,7 @@ async function getPluginVersion(pluginDir: string): Promise<string> {
 
 function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
 	return new Promise((resolve, reject) => {
-		const get = url.startsWith("https") ? https.get : http.get;
+		const get = https.get;
 		get(url, (res) => {
 			if (
 				res.statusCode &&
