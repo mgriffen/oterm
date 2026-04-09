@@ -1,4 +1,4 @@
-import { addIcon, Plugin, WorkspaceLeaf } from "obsidian";
+import { addIcon, Platform, Plugin, WorkspaceLeaf } from "obsidian";
 import { VIEW_TYPE_TERMINAL, OTERM_ICON_SVG } from "./constants";
 import { OtermSettings, DEFAULT_SETTINGS } from "./settings";
 import { OtermSettingTab } from "./settings-tab";
@@ -9,6 +9,8 @@ export default class OtermPlugin extends Plugin {
 	settings: OtermSettings = DEFAULT_SETTINGS;
 
 	async onload(): Promise<void> {
+		if (Platform.isMobile) return;
+
 		await this.loadSettings();
 
 		addIcon("oterm-icon", OTERM_ICON_SVG);

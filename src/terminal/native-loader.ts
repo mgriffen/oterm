@@ -1,21 +1,27 @@
 import { Notice } from "obsidian";
 import { createHash } from "crypto";
-import { access, readFile, writeFile, mkdir } from "fs/promises";
+import { access, chmod, readFile, writeFile, mkdir, rm } from "fs/promises";
+import { createWriteStream } from "fs";
 import * as https from "https";
 import * as path from "path";
-import { getPlatformTriple } from "../utils/platform";
+import * as yauzl from "yauzl";
+import { getPlatformTriple, IS_WIN } from "../utils/platform";
 
 const GITHUB_OWNER = "mgriffen";
 const GITHUB_REPO = "oterm";
 const NATIVE_DIR_NAME = "native";
 const BINARY_NAME = "pty.node";
 const SHIM_NAME = "node-pty.js";
+const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // 20 MB
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
 
 // node-pty is loaded at runtime from prebuilt binaries, not bundled
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type NodePtyModule = any;
 
 let cachedModule: NodePtyModule | null = null;
+let downloadPromise: Promise<void> | null = null;
 
 async function fileExists(filePath: string): Promise<boolean> {
 	try {
@@ -47,15 +53,34 @@ export async function loadNodePty(pluginDir: string): Promise<NodePtyModule> {
 		pty = require(modulePath) as NodePtyModule;
 	} else {
 		if (!(await fileExists(binaryPath))) {
-			await downloadBinary(pluginDir, triple);
+			// Race guard: reuse in-flight download if another tab triggered one
+			if (!downloadPromise) {
+				downloadPromise = downloadAndExtract(pluginDir, triple);
+			}
+			try {
+				await downloadPromise;
+			} finally {
+				downloadPromise = null;
+			}
 		}
 
 		if (!(await fileExists(shimPath))) {
 			await writeShim(shimPath);
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		pty = require(shimPath) as NodePtyModule;
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			pty = require(shimPath) as NodePtyModule;
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			if (msg.includes("NODE_MODULE_VERSION")) {
+				throw new Error(
+					"oterm: binary is incompatible with this Obsidian version. " +
+					"Please update the plugin or reinstall."
+				);
+			}
+			throw err;
+		}
 	}
 
 	if (typeof pty.spawn !== "function") {
@@ -69,56 +94,120 @@ export async function loadNodePty(pluginDir: string): Promise<NodePtyModule> {
 	return pty;
 }
 
-async function downloadBinary(
+async function downloadAndExtract(
 	pluginDir: string,
 	triple: string
 ): Promise<void> {
 	const notice = new Notice("oterm: downloading terminal binary...", 0);
+	const targetDir = path.join(pluginDir, NATIVE_DIR_NAME, triple);
 
 	try {
 		const version = await getPluginVersion(pluginDir);
-		const assetName = `node-pty-${triple}.node`;
-		const url = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${version}/${assetName}`;
+		const zipName = `node-pty-${triple}.zip`;
+		const baseUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${version}`;
 
-		const checksumsPath = path.join(pluginDir, "checksums.json");
-		if (!(await fileExists(checksumsPath))) {
-			throw new Error(
-				"oterm: checksums.json not found. " +
-				"Cannot verify binary integrity. Reinstall the plugin."
-			);
-		}
-
-		const checksums = JSON.parse(await readFile(checksumsPath, "utf-8"));
-		const expectedHash = checksums[assetName];
+		// Download checksums first
+		notice.setMessage("oterm: verifying binary integrity...");
+		const checksumsData = await httpGetWithRetry(`${baseUrl}/checksums.json`);
+		const checksums = JSON.parse(checksumsData.toString("utf-8"));
+		const expectedHash = checksums[zipName];
 		if (!expectedHash) {
 			throw new Error(
-				`oterm: no checksum entry for ${assetName} in checksums.json. ` +
-				`Cannot verify binary integrity.`
+				`oterm: no checksum entry for ${zipName}. ` +
+				"Cannot verify binary integrity."
 			);
 		}
 
-		const data = await httpGet(url);
+		// Download zip
+		notice.setMessage("oterm: downloading terminal binary...");
+		const zipData = await httpGetWithRetry(`${baseUrl}/${zipName}`);
 
-		const actualHash = createHash("sha256").update(data).digest("hex");
+		// Verify checksum
+		const actualHash = createHash("sha256").update(zipData).digest("hex");
 		if (actualHash !== expectedHash) {
 			throw new Error(
-				`oterm: checksum mismatch for ${assetName}. ` +
+				`oterm: checksum mismatch for ${zipName}. ` +
 				`Expected ${expectedHash}, got ${actualHash}.`
 			);
 		}
 
-		const nativeDir = path.join(pluginDir, NATIVE_DIR_NAME, triple);
-		await mkdir(nativeDir, { recursive: true });
-		await writeFile(path.join(nativeDir, BINARY_NAME), data);
+		// Extract zip
+		notice.setMessage("oterm: installing terminal binary...");
+
+		// Clean up any partial previous extraction
+		if (await fileExists(targetDir)) {
+			await rm(targetDir, { recursive: true });
+		}
+		await mkdir(targetDir, { recursive: true });
+
+		await extractZip(zipData, targetDir);
+
+		// Ensure executable permissions on Unix
+		if (!IS_WIN) {
+			const execFiles = [BINARY_NAME, "spawn-helper"];
+			for (const name of execFiles) {
+				const filePath = path.join(targetDir, name);
+				if (await fileExists(filePath)) {
+					await chmod(filePath, 0o755);
+				}
+			}
+		}
 
 		notice.setMessage("oterm: terminal binary installed.");
 		setTimeout(() => notice.hide(), 3000);
 	} catch (err) {
 		notice.hide();
+		try { await rm(targetDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 		const msg = err instanceof Error ? err.message : "unknown error";
 		new Notice(`oterm: failed to download binary — ${msg}`, 10000);
 		throw err;
 	}
+}
+
+function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		yauzl.fromBuffer(zipData, { lazyEntries: true }, (err, zipfile) => {
+			if (err || !zipfile) {
+				reject(err ?? new Error("Failed to open zip"));
+				return;
+			}
+
+			zipfile.readEntry();
+
+			zipfile.on("entry", (entry: yauzl.Entry) => {
+				// Skip directories
+				if (entry.fileName.endsWith("/")) {
+					zipfile.readEntry();
+					return;
+				}
+
+				const outputPath = path.join(targetDir, path.basename(entry.fileName));
+
+				zipfile.openReadStream(entry, (streamErr, readStream) => {
+					if (streamErr || !readStream) {
+						zipfile.close();
+						reject(streamErr ?? new Error("Failed to read zip entry"));
+						return;
+					}
+
+					const writeStream = createWriteStream(outputPath);
+					readStream.pipe(writeStream);
+
+					writeStream.on("finish", () => {
+						zipfile.readEntry();
+					});
+
+					writeStream.on("error", (e) => {
+						zipfile.close();
+						reject(e);
+					});
+				});
+			});
+
+			zipfile.on("end", resolve);
+			zipfile.on("error", reject);
+		});
+	});
 }
 
 async function writeShim(shimPath: string): Promise<void> {
@@ -147,7 +236,7 @@ async function writeShim(shimPath: string): Promise<void> {
 		"    rows: rows,",
 		"    cwd: (options && options.cwd) || process.cwd(),",
 		"    env: (options && options.env) || process.env,",
-		"    useConpty: options && options.useConpty !== undefined ? options.useConpty : true,",
+		"    useConpty: options && options.useConpty !== undefined ? options.useConpty : false,",
 		"  });",
 		"}",
 		"",
@@ -172,10 +261,24 @@ async function getPluginVersion(pluginDir: string): Promise<string> {
 	}
 }
 
+async function httpGetWithRetry(url: string): Promise<Buffer> {
+	let lastError: Error | null = null;
+	for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+		try {
+			return await httpGet(url);
+		} catch (err) {
+			lastError = err instanceof Error ? err : new Error(String(err));
+			if (attempt < MAX_RETRIES) {
+				await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+			}
+		}
+	}
+	throw lastError;
+}
+
 function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
 	return new Promise((resolve, reject) => {
-		const get = https.get;
-		get(url, (res) => {
+		https.get(url, (res) => {
 			if (
 				res.statusCode &&
 				res.statusCode >= 300 &&
@@ -205,10 +308,21 @@ function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
 				return;
 			}
 
+			let totalBytes = 0;
+			let settled = false;
 			const chunks: Buffer[] = [];
-			res.on("data", (chunk: Buffer) => chunks.push(chunk));
-			res.on("end", () => resolve(Buffer.concat(chunks)));
-			res.on("error", reject);
+			res.on("data", (chunk: Buffer) => {
+				totalBytes += chunk.length;
+				if (totalBytes > MAX_DOWNLOAD_BYTES && !settled) {
+					settled = true;
+					res.destroy();
+					reject(new Error(`oterm: download exceeds ${MAX_DOWNLOAD_BYTES / 1024 / 1024}MB limit — aborting`));
+					return;
+				}
+				chunks.push(chunk);
+			});
+			res.on("end", () => { if (!settled) resolve(Buffer.concat(chunks)); });
+			res.on("error", (e) => { if (!settled) { settled = true; reject(e); } });
 		}).on("error", reject);
 	});
 }
