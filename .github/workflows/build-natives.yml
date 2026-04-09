@@ -28,36 +28,28 @@ jobs:
           - name: win-x64
             runner: windows-latest
             triple: win32-x64
-            files: |
-              node_modules/node-pty/build/Release/pty.node
-              node_modules/node-pty/build/Release/winpty.dll
-              node_modules/node-pty/build/Release/winpty-agent.exe
+            files: 'node_modules/node-pty/build/Release/pty.node node_modules/node-pty/build/Release/winpty.dll node_modules/node-pty/build/Release/winpty-agent.exe'
 
           - name: mac-arm64
             runner: macos-latest
             triple: darwin-arm64
-            files: |
-              node_modules/node-pty/build/Release/pty.node
-              node_modules/node-pty/build/Release/spawn-helper
+            files: 'node_modules/node-pty/build/Release/pty.node node_modules/node-pty/build/Release/spawn-helper'
 
           - name: mac-x64
-            runner: macos-13
+            runner: macos-14
             triple: darwin-x64
-            files: |
-              node_modules/node-pty/build/Release/pty.node
-              node_modules/node-pty/build/Release/spawn-helper
+            arch: x64
+            files: 'node_modules/node-pty/build/Release/pty.node node_modules/node-pty/build/Release/spawn-helper'
 
           - name: linux-x64
             runner: ubuntu-latest
             triple: linux-x64
-            files: |
-              node_modules/node-pty/build/Release/pty.node
+            files: 'node_modules/node-pty/build/Release/pty.node'
 
           - name: linux-arm64
             runner: ubuntu-24.04-arm
             triple: linux-arm64
-            files: |
-              node_modules/node-pty/build/Release/pty.node
+            files: 'node_modules/node-pty/build/Release/pty.node'
 
     runs-on: ${{ matrix.runner }}
     name: Build ${{ matrix.name }}
@@ -73,9 +65,11 @@ jobs:
         run: |
           npm init -y
           npm install node-pty@${{ env.NODE_PTY_VERSION }}
+        env:
+          npm_config_arch: ${{ matrix.arch || '' }}
 
       - name: Rebuild for Electron
-        run: npx @electron/rebuild --version ${{ env.ELECTRON_VERSION }} --module-dir . --which-module node-pty
+        run: npx @electron/rebuild --version ${{ env.ELECTRON_VERSION }} --module-dir . --which-module node-pty ${{ matrix.arch && format('--arch {0}', matrix.arch) || '' }}
 
       - name: Ensure executable permissions (Unix)
         if: runner.os != 'Windows'
