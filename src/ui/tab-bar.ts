@@ -22,9 +22,6 @@ export class TabBar {
 	render(): void {
 		this.containerEl.empty();
 
-		const brandEl = this.containerEl.createDiv({ cls: "oterm-tab-brand" });
-		setIcon(brandEl, "oterm-icon");
-
 		const tabsEl = this.containerEl.createDiv({ cls: "oterm-tabs" });
 		const sessions = this.manager.list();
 		const activeId = this.manager.getActiveId();

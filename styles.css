@@ -42,20 +42,6 @@
 	overflow-y: hidden;
 }
 
-.oterm-tab-brand {
-	display: flex;
-	align-items: center;
-	padding-left: 8px;
-	padding-right: 4px;
-	color: var(--text-muted);
-	pointer-events: none;
-	flex-shrink: 0;
-}
-
-.oterm-tab-brand svg {
-	width: 16px;
-	height: 16px;
-}
 
 .oterm-tabs {
 	display: flex;

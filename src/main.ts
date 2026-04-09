@@ -89,6 +89,18 @@ export default class OtermPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new OtermSettingTab(this.app, this));
+
+		// Ensure the terminal view exists in the right sidebar on startup
+		// so its icon is always visible in the sidebar tab strip
+		this.app.workspace.onLayoutReady(() => {
+			if (this.app.workspace.getLeavesOfType(VIEW_TYPE_TERMINAL).length === 0) {
+				const leaf = this.app.workspace.getRightLeaf(false);
+				leaf?.setViewState({
+					type: VIEW_TYPE_TERMINAL,
+					active: false,
+				});
+			}
+		});
 	}
 
 	async onunload(): Promise<void> {

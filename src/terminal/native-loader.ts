@@ -33,20 +33,30 @@ export async function loadNodePty(pluginDir: string): Promise<NodePtyModule> {
 
 	const nativeDir = path.join(pluginDir, NATIVE_DIR_NAME);
 	const triple = getPlatformTriple();
+
+	// Dev install: full node-pty module directory (JS API + native bindings)
+	const modulePath = path.join(nativeDir, triple, "node-pty");
+	// Production: single binary + generated shim
 	const binaryPath = path.join(nativeDir, triple, BINARY_NAME);
 	const shimPath = path.join(nativeDir, triple, SHIM_NAME);
 
-	if (!(await fileExists(binaryPath))) {
-		await downloadBinary(pluginDir, triple);
-	}
+	let pty: NodePtyModule;
 
-	if (!(await fileExists(shimPath))) {
-		await writeShim(shimPath);
-	}
+	if (await fileExists(path.join(modulePath, "package.json"))) {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		pty = require(modulePath) as NodePtyModule;
+	} else {
+		if (!(await fileExists(binaryPath))) {
+			await downloadBinary(pluginDir, triple);
+		}
 
-	// Load via JS shim which wraps the native .node binary
-	// eslint-disable-next-line @typescript-eslint/no-var-requires
-	const pty = require(shimPath) as NodePtyModule;
+		if (!(await fileExists(shimPath))) {
+			await writeShim(shimPath);
+		}
+
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		pty = require(shimPath) as NodePtyModule;
+	}
 
 	if (typeof pty.spawn !== "function") {
 		throw new Error(
