@@ -157,6 +157,7 @@ async function downloadAndExtract(
 		setTimeout(() => notice.hide(), 3000);
 	} catch (err) {
 		notice.hide();
+		try { await rm(targetDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 		const msg = err instanceof Error ? err.message : "unknown error";
 		new Notice(`oterm: failed to download binary — ${msg}`, 10000);
 		throw err;
