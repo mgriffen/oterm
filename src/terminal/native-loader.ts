@@ -109,9 +109,15 @@ async function getPluginVersion(pluginDir: string): Promise<string> {
 	const manifestPath = path.join(pluginDir, "manifest.json");
 	try {
 		const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
-		return manifest.version ?? "0.1.0";
-	} catch {
-		return "0.1.0";
+		if (!manifest.version) {
+			throw new Error("no version field in manifest.json");
+		}
+		return manifest.version;
+	} catch (err) {
+		throw new Error(
+			`oterm: cannot determine plugin version — ${err instanceof Error ? err.message : "manifest.json unreadable"}. ` +
+			"Reinstall the plugin."
+		);
 	}
 }
 
@@ -126,14 +132,22 @@ function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
 				res.headers.location
 			) {
 				if (redirectsLeft <= 0) {
+					res.resume();
 					reject(new Error("Too many redirects"));
 					return;
 				}
+				if (!res.headers.location.startsWith("https://")) {
+					res.resume();
+					reject(new Error("oterm: redirect to non-HTTPS URL rejected"));
+					return;
+				}
+				res.resume();
 				httpGet(res.headers.location, redirectsLeft - 1).then(resolve, reject);
 				return;
 			}
 
 			if (res.statusCode !== 200) {
+				res.resume();
 				reject(
 					new Error(`HTTP ${res.statusCode} fetching ${url}`)
 				);
