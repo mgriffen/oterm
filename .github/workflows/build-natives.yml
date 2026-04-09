@@ -1,0 +1,143 @@
+name: Build Native Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      electron_version:
+        description: 'Electron version to build against'
+        required: false
+        default: '39.6.0'
+      node_pty_version:
+        description: 'node-pty version'
+        required: false
+        default: '1.1.0'
+
+env:
+  ELECTRON_VERSION: ${{ inputs.electron_version || '39.6.0' }}
+  NODE_PTY_VERSION: ${{ inputs.node_pty_version || '1.1.0' }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: win-x64
+            runner: windows-latest
+            triple: win32-x64
+            files: |
+              node_modules/node-pty/build/Release/pty.node
+              node_modules/node-pty/build/Release/winpty.dll
+              node_modules/node-pty/build/Release/winpty-agent.exe
+
+          - name: mac-arm64
+            runner: macos-latest
+            triple: darwin-arm64
+            files: |
+              node_modules/node-pty/build/Release/pty.node
+              node_modules/node-pty/build/Release/spawn-helper
+
+          - name: mac-x64
+            runner: macos-13
+            triple: darwin-x64
+            files: |
+              node_modules/node-pty/build/Release/pty.node
+              node_modules/node-pty/build/Release/spawn-helper
+
+          - name: linux-x64
+            runner: ubuntu-latest
+            triple: linux-x64
+            files: |
+              node_modules/node-pty/build/Release/pty.node
+
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            triple: linux-arm64
+            files: |
+              node_modules/node-pty/build/Release/pty.node
+
+    runs-on: ${{ matrix.runner }}
+    name: Build ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install node-pty
+        run: |
+          npm init -y
+          npm install node-pty@${{ env.NODE_PTY_VERSION }}
+
+      - name: Rebuild for Electron
+        run: npx @electron/rebuild --version ${{ env.ELECTRON_VERSION }} --module-dir . --which-module node-pty
+
+      - name: Ensure executable permissions (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          for f in ${{ matrix.files }}; do
+            if [ -f "$f" ]; then
+              chmod +x "$f"
+            fi
+          done
+
+      - name: Package zip
+        shell: bash
+        run: |
+          mkdir -p staging
+          for f in ${{ matrix.files }}; do
+            if [ -f "$f" ]; then
+              cp "$f" staging/
+            fi
+          done
+          cd staging
+          zip ../node-pty-${{ matrix.triple }}.zip *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-pty-${{ matrix.triple }}
+          path: node-pty-${{ matrix.triple }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          echo '{' > checksums.json
+          first=true
+          for f in *.zip; do
+            hash=$(sha256sum "$f" | cut -d' ' -f1)
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo ',' >> checksums.json
+            fi
+            printf '  "%s": "%s"' "$f" "$hash" >> checksums.json
+          done
+          echo '' >> checksums.json
+          echo '}' >> checksums.json
+          cat checksums.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*.zip
+            artifacts/checksums.json
+          generate_release_notes: true
