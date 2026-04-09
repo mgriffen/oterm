@@ -65,7 +65,7 @@ function detectUnixShell(): ShellInfo {
 	return { shell: "/bin/sh", args: [] };
 }
 
-function canResolveShell(shell: string): boolean {
+export function canResolveShell(shell: string): boolean {
 	if (path.isAbsolute(shell)) {
 		return existsSync(shell);
 	}
