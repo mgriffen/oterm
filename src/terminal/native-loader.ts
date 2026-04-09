@@ -9,6 +9,7 @@ const GITHUB_OWNER = "mgriffen";
 const GITHUB_REPO = "oterm";
 const NATIVE_DIR_NAME = "native";
 const BINARY_NAME = "pty.node";
+const SHIM_NAME = "node-pty.js";
 
 // node-pty is loaded at runtime from prebuilt binaries, not bundled
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,13 +34,19 @@ export async function loadNodePty(pluginDir: string): Promise<NodePtyModule> {
 	const nativeDir = path.join(pluginDir, NATIVE_DIR_NAME);
 	const triple = getPlatformTriple();
 	const binaryPath = path.join(nativeDir, triple, BINARY_NAME);
+	const shimPath = path.join(nativeDir, triple, SHIM_NAME);
 
 	if (!(await fileExists(binaryPath))) {
 		await downloadBinary(pluginDir, triple);
 	}
 
+	if (!(await fileExists(shimPath))) {
+		await writeShim(shimPath);
+	}
+
+	// Load via JS shim which wraps the native .node binary
 	// eslint-disable-next-line @typescript-eslint/no-var-requires
-	const pty = require(binaryPath) as NodePtyModule;
+	const pty = require(shimPath) as NodePtyModule;
 
 	if (typeof pty.spawn !== "function") {
 		throw new Error(
@@ -102,6 +109,41 @@ async function downloadBinary(
 		new Notice(`oterm: failed to download binary — ${msg}`, 10000);
 		throw err;
 	}
+}
+
+async function writeShim(shimPath: string): Promise<void> {
+	const shimCode = [
+		"// Auto-generated shim — loads the native pty.node binding",
+		"// and re-exports the node-pty JS API",
+		"const path = require('path');",
+		"const nativePath = path.join(__dirname, 'pty.node');",
+		"const binding = require(nativePath);",
+		"",
+		"// node-pty's native binding exports ConptyProcess/UnixTerminal constructors",
+		"// Wrap them in a spawn() function matching the node-pty public API",
+		"const os = require('os');",
+		"const isWin = os.platform() === 'win32';",
+		"",
+		"function spawn(file, args, options) {",
+		"  const TerminalCtor = isWin ? binding.ConptyProcess : (binding.UnixTerminal || binding.Pty);",
+		"  if (!TerminalCtor) {",
+		"    throw new Error('oterm: native binding does not export a terminal constructor');",
+		"  }",
+		"  const cols = (options && options.cols) || 80;",
+		"  const rows = (options && options.rows) || 24;",
+		"  return new TerminalCtor(file, args || [], {",
+		"    name: (options && options.name) || 'xterm-256color',",
+		"    cols: cols,",
+		"    rows: rows,",
+		"    cwd: (options && options.cwd) || process.cwd(),",
+		"    env: (options && options.env) || process.env,",
+		"    useConpty: options && options.useConpty !== undefined ? options.useConpty : true,",
+		"  });",
+		"}",
+		"",
+		"module.exports = { spawn: spawn };",
+	].join("\n");
+	await writeFile(shimPath, shimCode, "utf-8");
 }
 
 async function getPluginVersion(pluginDir: string): Promise<string> {
