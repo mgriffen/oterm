@@ -18,6 +18,11 @@ export interface ShellValidationResult {
 	error?: string;
 }
 
+const GIT_BASH_PATHS = [
+	"C:\\Program Files\\Git\\bin\\bash.exe",
+	"C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+];
+
 const PRESETS: ShellPreset[] = [
 	// ── Windows ──
 	{
@@ -69,18 +74,10 @@ const PRESETS: ShellPreset[] = [
 		shell: "bash.exe",
 		args: [],
 		detect: () => {
-			const gitPaths = [
-				"C:\\Program Files\\Git\\bin\\bash.exe",
-				"C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-			];
-			return gitPaths.some((p) => existsSync(p)) || canResolveShell("bash.exe");
+			return GIT_BASH_PATHS.some((p) => existsSync(p)) || canResolveShell("bash.exe");
 		},
-		buildCommand: (cwd: string) => {
-			const gitPaths = [
-				"C:\\Program Files\\Git\\bin\\bash.exe",
-				"C:\\Program Files (x86)\\Git\\bin\\bash.exe",
-			];
-			const found = gitPaths.find((p) => existsSync(p));
+		buildCommand: () => {
+			const found = GIT_BASH_PATHS.find((p) => existsSync(p));
 			return { shell: found ?? "bash.exe", args: [] };
 		},
 	},
@@ -93,6 +90,10 @@ const PRESETS: ShellPreset[] = [
 		shell: "/bin/zsh",
 		args: [],
 		detect: () => existsSync("/bin/zsh") || existsSync("/usr/bin/zsh"),
+		buildCommand: () => {
+			const shell = existsSync("/bin/zsh") ? "/bin/zsh" : "/usr/bin/zsh";
+			return { shell, args: [] };
+		},
 	},
 	{
 		id: "bash",
