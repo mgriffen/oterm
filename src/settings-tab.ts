@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type OtermPlugin from "./main";
-import { getPresetsForPlatform, getPresetById, validateShell } from "./terminal/shell-registry";
+import { getPresetsForPlatform, validateShell } from "./terminal/shell-registry";
 
 export class OtermSettingTab extends PluginSettingTab {
 	constructor(
@@ -33,6 +33,7 @@ export class OtermSettingTab extends PluginSettingTab {
 		const isPreset =
 			currentShell === "auto" ||
 			presets.some((p) => p.id === currentShell);
+		let lastValidShell = currentShell;
 
 		// Detection status indicator
 		const statusEl = containerEl.createSpan({ cls: "oterm-shell-status" });
@@ -63,11 +64,12 @@ export class OtermSettingTab extends PluginSettingTab {
 			dropdown.onChange(async (value) => {
 				// Ignore separator selections
 				if (value.startsWith("_sep_")) {
-					dropdown.setValue(currentShell);
+					dropdown.setValue(lastValidShell);
 					return;
 				}
 				if (value !== "custom") {
 					this.plugin.settings.defaultShell = value;
+					lastValidShell = value;
 					await this.plugin.saveSettings();
 					customShellInput.settingEl.toggle(false);
 				} else {
