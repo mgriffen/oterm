@@ -70,6 +70,16 @@ export class TerminalSession {
 	open(): void {
 		this.terminal.open(this.container);
 
+		// Prevent Obsidian from intercepting keyboard events meant for the terminal.
+		// Without this, Ctrl+D, Ctrl+C, Ctrl+L, etc. get swallowed by Obsidian hotkeys.
+		this.terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+			// Let Obsidian handle its own command palette (Ctrl+P) and settings (Ctrl+,)
+			if (e.ctrlKey && (e.key === "p" || e.key === ",")) return false;
+			// Stop all other keypresses from bubbling to Obsidian
+			e.stopPropagation();
+			return true;
+		});
+
 		// fit must be loaded after open
 		this.addons = loadAddons(this.terminal, this.options.settings.useWebGL);
 		this.addons.fit.fit();
