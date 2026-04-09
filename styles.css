@@ -113,16 +113,17 @@
 	align-items: center;
 	padding: 4px 8px;
 	cursor: pointer;
-	opacity: 0.5;
+	color: var(--interactive-accent);
 }
 
 .oterm-tab-new:hover {
-	opacity: 1;
+	color: var(--interactive-accent-hover);
+	background: var(--background-modifier-hover);
 }
 
 .oterm-tab-new svg {
-	width: 14px;
-	height: 14px;
+	width: 18px;
+	height: 18px;
 }
 
 .oterm-tab-rename {
