@@ -1,15 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type OtermPlugin from "./main";
-import { IS_WIN } from "./utils/platform";
-
-const SHELL_PRESETS: { label: string; value: string; platform?: "win32" }[] = [
-	{ label: "Auto-detect", value: "auto" },
-	{ label: "PowerShell 7 (pwsh)", value: "pwsh.exe", platform: "win32" },
-	{ label: "Windows PowerShell", value: "powershell.exe", platform: "win32" },
-	{ label: "CMD", value: "cmd.exe", platform: "win32" },
-	{ label: "WSL (Ubuntu)", value: "wsl.exe", platform: "win32" },
-	{ label: "Git Bash", value: "C:\\Program Files\\Git\\bin\\bash.exe", platform: "win32" },
-];
+import { getPresetsForPlatform, getPresetById, validateShell } from "./terminal/shell-registry";
 
 export class OtermSettingTab extends PluginSettingTab {
 	constructor(
@@ -34,24 +25,47 @@ export class OtermSettingTab extends PluginSettingTab {
 			.setName("Default shell")
 			.setDesc("Shell to launch when opening a terminal.");
 
-		const presets = SHELL_PRESETS.filter(
-			(p) => !p.platform || (p.platform === "win32" && IS_WIN)
-		);
+		const presets = getPresetsForPlatform();
+		const systemPresets = presets.filter((p) => p.category === "system");
+		const aiPresets = presets.filter((p) => p.category === "ai");
 
-		const isPreset = presets.some(
-			(p) => p.value === this.plugin.settings.defaultShell
-		);
+		const currentShell = this.plugin.settings.defaultShell;
+		const isPreset =
+			currentShell === "auto" ||
+			presets.some((p) => p.id === currentShell);
+
+		// Detection status indicator
+		const statusEl = containerEl.createSpan({ cls: "oterm-shell-status" });
+		this.updateShellStatus(statusEl, currentShell);
 
 		shellSetting.addDropdown((dropdown) => {
-			for (const preset of presets) {
-				dropdown.addOption(preset.value, preset.label);
+			dropdown.addOption("auto", "Auto-detect (recommended)");
+
+			// System Shells group
+			if (systemPresets.length > 0) {
+				dropdown.addOption("_sep_system", "── System Shells ──");
+				for (const preset of systemPresets) {
+					dropdown.addOption(preset.id, preset.name);
+				}
 			}
+
+			// AI Tools group
+			if (aiPresets.length > 0) {
+				dropdown.addOption("_sep_ai", "── AI Tools ──");
+				for (const preset of aiPresets) {
+					dropdown.addOption(preset.id, preset.name);
+				}
+			}
+
 			dropdown.addOption("custom", "Custom...");
 
-			dropdown.setValue(
-				isPreset ? this.plugin.settings.defaultShell : "custom"
-			);
+			dropdown.setValue(isPreset ? currentShell : "custom");
 			dropdown.onChange(async (value) => {
+				// Ignore separator selections
+				if (value.startsWith("_sep_")) {
+					dropdown.setValue(currentShell);
+					return;
+				}
 				if (value !== "custom") {
 					this.plugin.settings.defaultShell = value;
 					await this.plugin.saveSettings();
@@ -59,6 +73,7 @@ export class OtermSettingTab extends PluginSettingTab {
 				} else {
 					customShellInput.settingEl.toggle(true);
 				}
+				this.updateShellStatus(statusEl, value);
 			});
 		});
 
@@ -74,6 +89,7 @@ export class OtermSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.defaultShell = value;
 						await this.plugin.saveSettings();
+						this.updateShellStatus(statusEl, value);
 					})
 			);
 		customShellInput.settingEl.toggle(!isPreset);
@@ -216,5 +232,20 @@ export class OtermSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+	}
+
+	private updateShellStatus(el: HTMLSpanElement, shellId: string): void {
+		if (shellId === "custom" || shellId.startsWith("_sep_")) {
+			el.setText("");
+			return;
+		}
+		const result = validateShell(shellId);
+		if (result.valid) {
+			el.setText("✓ Detected");
+			el.className = "oterm-shell-status oterm-shell-detected";
+		} else {
+			el.setText("⚠ Not found");
+			el.className = "oterm-shell-status oterm-shell-missing";
+		}
 	}
 }
