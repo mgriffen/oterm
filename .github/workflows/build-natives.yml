@@ -80,15 +80,84 @@ jobs:
             fi
           done
 
+      - name: Stage files for packaging
+        shell: bash
+        run: |
+          mkdir -p staging/build/Release staging/lib/shared staging/lib/worker
+          # Copy native binary and platform-specific files
+          for f in ${{ matrix.files }}; do
+            if [ -f "$f" ]; then
+              cp "$f" staging/build/Release/
+            fi
+          done
+          # Copy node-pty JS files (needed for the full API)
+          cp node_modules/node-pty/lib/*.js staging/lib/
+          cp node_modules/node-pty/lib/shared/*.js staging/lib/shared/ 2>/dev/null || true
+          cp node_modules/node-pty/lib/worker/*.js staging/lib/worker/ 2>/dev/null || true
+          # Copy package.json (needed for require resolution)
+          cp node_modules/node-pty/package.json staging/
+
+      - name: Patch Windows conout for Electron compatibility
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Replace worker_threads-based ConoutConnection with inline pipe forwarding
+          # Electron's renderer process doesn't support worker_threads
+          cat > staging/lib/windowsConoutConnection.js << 'PATCH_EOF'
+          "use strict";
+          Object.defineProperty(exports, "__esModule", { value: true });
+          exports.ConoutConnection = void 0;
+          var net_1 = require("net");
+          var conout_1 = require("./shared/conout");
+          var eventEmitter2_1 = require("./eventEmitter2");
+          var FLUSH_DATA_INTERVAL = 1000;
+          var ConoutConnection = (function () {
+              function ConoutConnection(_conoutPipeName, _useConptyDll) {
+                  var _this = this;
+                  this._conoutPipeName = _conoutPipeName;
+                  this._useConptyDll = _useConptyDll;
+                  this._isDisposed = false;
+                  this._onReady = new eventEmitter2_1.EventEmitter2();
+                  this._conoutSocket = new net_1.Socket();
+                  this._conoutSocket.setEncoding('utf8');
+                  this._conoutSocket.connect(_conoutPipeName, function () {
+                      _this._server = net_1.createServer(function (workerSocket) {
+                          _this._conoutSocket.pipe(workerSocket);
+                      });
+                      _this._server.listen(conout_1.getWorkerPipeName(_conoutPipeName));
+                      _this._onReady.fire();
+                  });
+              }
+              Object.defineProperty(ConoutConnection.prototype, "onReady", {
+                  get: function () { return this._onReady.event; },
+                  enumerable: false,
+                  configurable: true
+              });
+              ConoutConnection.prototype.dispose = function () {
+                  if (!this._useConptyDll && this._isDisposed) { return; }
+                  this._isDisposed = true;
+                  this._drainDataAndClose();
+              };
+              ConoutConnection.prototype.connectSocket = function (socket) {
+                  socket.connect(conout_1.getWorkerPipeName(this._conoutPipeName));
+              };
+              ConoutConnection.prototype._drainDataAndClose = function () {
+                  var _this = this;
+                  if (this._drainTimeout) { clearTimeout(this._drainTimeout); }
+                  this._drainTimeout = setTimeout(function () { return _this._destroySocket(); }, FLUSH_DATA_INTERVAL);
+              };
+              ConoutConnection.prototype._destroySocket = function () {
+                  if (this._server) { this._server.close(); }
+                  if (this._conoutSocket) { this._conoutSocket.destroy(); }
+              };
+              return ConoutConnection;
+          }());
+          exports.ConoutConnection = ConoutConnection;
+          PATCH_EOF
+
       - name: Package zip
         shell: bash
         run: |
-          mkdir -p staging
-          for f in ${{ matrix.files }}; do
-            if [ -f "$f" ]; then
-              cp "$f" staging/
-            fi
-          done
           cd staging
           7z a ../node-pty-${{ matrix.triple }}.zip *
 

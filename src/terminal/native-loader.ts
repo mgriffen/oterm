@@ -1,6 +1,6 @@
 import { Notice } from "obsidian";
 import { createHash } from "crypto";
-import { access, chmod, readFile, writeFile, mkdir, rm } from "fs/promises";
+import { access, chmod, readFile, mkdir, rm } from "fs/promises";
 import { createWriteStream } from "fs";
 import * as https from "https";
 import * as path from "path";
@@ -10,8 +10,6 @@ import { getPlatformTriple, IS_WIN } from "../utils/platform";
 const GITHUB_OWNER = "mgriffen";
 const GITHUB_REPO = "oterm";
 const NATIVE_DIR_NAME = "native";
-const BINARY_NAME = "pty.node";
-const SHIM_NAME = "node-pty.js";
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
@@ -37,50 +35,42 @@ export async function loadNodePty(pluginDir: string): Promise<NodePtyModule> {
 		return cachedModule;
 	}
 
-	const nativeDir = path.join(pluginDir, NATIVE_DIR_NAME);
 	const triple = getPlatformTriple();
+	const targetDir = path.join(pluginDir, NATIVE_DIR_NAME, triple);
 
-	// Dev install: full node-pty module directory (JS API + native bindings)
-	const modulePath = path.join(nativeDir, triple, "node-pty");
-	// Production: single binary + generated shim
-	const binaryPath = path.join(nativeDir, triple, BINARY_NAME);
-	const shimPath = path.join(nativeDir, triple, SHIM_NAME);
+	// Dev install: full node-pty module at native/<triple>/node-pty/
+	// Production: node-pty module downloaded to native/<triple>/ (has package.json at root)
+	const devModulePath = path.join(targetDir, "node-pty");
+	const isDevInstall = await fileExists(path.join(devModulePath, "package.json"));
+	const isProdInstall = await fileExists(path.join(targetDir, "package.json"));
+
+	if (!isDevInstall && !isProdInstall) {
+		// Race guard: reuse in-flight download if another tab triggered one
+		if (!downloadPromise) {
+			downloadPromise = downloadAndExtract(pluginDir, triple);
+		}
+		try {
+			await downloadPromise;
+		} finally {
+			downloadPromise = null;
+		}
+	}
+
+	const modulePath = isDevInstall ? devModulePath : targetDir;
 
 	let pty: NodePtyModule;
-
-	if (await fileExists(path.join(modulePath, "package.json"))) {
+	try {
 		// eslint-disable-next-line @typescript-eslint/no-var-requires
 		pty = require(modulePath) as NodePtyModule;
-	} else {
-		if (!(await fileExists(binaryPath))) {
-			// Race guard: reuse in-flight download if another tab triggered one
-			if (!downloadPromise) {
-				downloadPromise = downloadAndExtract(pluginDir, triple);
-			}
-			try {
-				await downloadPromise;
-			} finally {
-				downloadPromise = null;
-			}
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		if (msg.includes("NODE_MODULE_VERSION")) {
+			throw new Error(
+				"oterm: binary is incompatible with this Obsidian version. " +
+				"Please update the plugin or reinstall."
+			);
 		}
-
-		if (!(await fileExists(shimPath))) {
-			await writeShim(shimPath);
-		}
-
-		try {
-			// eslint-disable-next-line @typescript-eslint/no-var-requires
-			pty = require(shimPath) as NodePtyModule;
-		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			if (msg.includes("NODE_MODULE_VERSION")) {
-				throw new Error(
-					"oterm: binary is incompatible with this Obsidian version. " +
-					"Please update the plugin or reinstall."
-				);
-			}
-			throw err;
-		}
+		throw err;
 	}
 
 	if (typeof pty.spawn !== "function") {
@@ -144,9 +134,11 @@ async function downloadAndExtract(
 
 		// Ensure executable permissions on Unix
 		if (!IS_WIN) {
-			const execFiles = [BINARY_NAME, "spawn-helper"];
-			for (const name of execFiles) {
-				const filePath = path.join(targetDir, name);
+			const execFiles = [
+				path.join(targetDir, "build", "Release", "pty.node"),
+				path.join(targetDir, "build", "Release", "spawn-helper"),
+			];
+			for (const filePath of execFiles) {
 				if (await fileExists(filePath)) {
 					await chmod(filePath, 0o755);
 				}
@@ -174,14 +166,28 @@ function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
 
 			zipfile.readEntry();
 
-			zipfile.on("entry", (entry: yauzl.Entry) => {
+			zipfile.on("entry", async (entry: yauzl.Entry) => {
 				// Skip directories
 				if (entry.fileName.endsWith("/")) {
 					zipfile.readEntry();
 					return;
 				}
 
-				const outputPath = path.join(targetDir, path.basename(entry.fileName));
+				// Preserve directory structure but guard against path traversal
+				const normalized = path.normalize(entry.fileName);
+				if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
+					zipfile.readEntry();
+					return;
+				}
+				const outputPath = path.join(targetDir, normalized);
+				// Ensure parent directory exists
+				const parentDir = path.dirname(outputPath);
+				try {
+					await mkdir(parentDir, { recursive: true });
+				} catch {
+					reject(new Error(`Failed to create directory: ${parentDir}`));
+					return;
+				}
 
 				zipfile.openReadStream(entry, (streamErr, readStream) => {
 					if (streamErr || !readStream) {
@@ -208,41 +214,6 @@ function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
 			zipfile.on("error", reject);
 		});
 	});
-}
-
-async function writeShim(shimPath: string): Promise<void> {
-	const shimCode = [
-		"// Auto-generated shim — loads the native pty.node binding",
-		"// and re-exports the node-pty JS API",
-		"const path = require('path');",
-		"const nativePath = path.join(__dirname, 'pty.node');",
-		"const binding = require(nativePath);",
-		"",
-		"// node-pty's native binding exports ConptyProcess/UnixTerminal constructors",
-		"// Wrap them in a spawn() function matching the node-pty public API",
-		"const os = require('os');",
-		"const isWin = os.platform() === 'win32';",
-		"",
-		"function spawn(file, args, options) {",
-		"  const TerminalCtor = isWin ? binding.ConptyProcess : (binding.UnixTerminal || binding.Pty);",
-		"  if (!TerminalCtor) {",
-		"    throw new Error('oterm: native binding does not export a terminal constructor');",
-		"  }",
-		"  const cols = (options && options.cols) || 80;",
-		"  const rows = (options && options.rows) || 24;",
-		"  return new TerminalCtor(file, args || [], {",
-		"    name: (options && options.name) || 'xterm-256color',",
-		"    cols: cols,",
-		"    rows: rows,",
-		"    cwd: (options && options.cwd) || process.cwd(),",
-		"    env: (options && options.env) || process.env,",
-		"    useConpty: options && options.useConpty !== undefined ? options.useConpty : false,",
-		"  });",
-		"}",
-		"",
-		"module.exports = { spawn: spawn };",
-	].join("\n");
-	await writeFile(shimPath, shimCode, "utf-8");
 }
 
 async function getPluginVersion(pluginDir: string): Promise<string> {
@@ -333,7 +304,10 @@ export function getNativeDir(pluginDir: string): string {
 
 export async function isBinaryInstalled(pluginDir: string): Promise<boolean> {
 	const triple = getPlatformTriple();
-	return fileExists(
-		path.join(pluginDir, NATIVE_DIR_NAME, triple, BINARY_NAME)
+	const targetDir = path.join(pluginDir, NATIVE_DIR_NAME, triple);
+	// Check for production install (package.json) or dev install (node-pty subdir)
+	return (
+		(await fileExists(path.join(targetDir, "package.json"))) ||
+		(await fileExists(path.join(targetDir, "node-pty", "package.json")))
 	);
 }
