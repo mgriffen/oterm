@@ -130,7 +130,7 @@ export default class OtermPlugin extends Plugin {
 				return this.app.workspace.getLeaf("split", "horizontal");
 			}
 			case "right":
-				return this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf("tab");
+				return this.app.workspace.getRightLeaf(true) ?? this.app.workspace.getLeaf("tab");
 			case "tab":
 			default:
 				return this.app.workspace.getLeaf("tab");
