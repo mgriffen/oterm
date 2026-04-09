@@ -1,0 +1,45 @@
+# Private working files — plans, specs, scratch, design artifacts
+.working/
+
+# Claude Code
+.claude/
+
+# Dependencies
+node_modules/
+
+# Environment & credentials
+.env
+.env.*
+.npmrc
+credentials.json
+*.pem
+*.key
+
+# Output / generated
+output/
+dist/
+build/
+coverage/
+
+# Browser state / credentials
+profiles/
+
+# OS & editor junk
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+
+# IDE settings (un-ignore per-project if sharing settings intentionally)
+.vscode/
+.idea/
+
+# Design working files
+*.psd
+*.ai
+*.sketch
+
+# One-off scripts (add specific names as needed)
