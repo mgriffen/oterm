@@ -73,10 +73,24 @@ export function isWSLShell(shell: string): boolean {
 	return basename === "wsl.exe" || basename === "wsl";
 }
 
+export function translateToWSLPath(windowsPath: string): string {
+	const match = windowsPath.match(/^([A-Za-z]):(.*)/);
+	if (match) {
+		const drive = match[1].toLowerCase();
+		const rest = match[2].replace(/\\/g, "/");
+		return `/mnt/${drive}${rest}`;
+	}
+	return windowsPath;
+}
+
 export function buildWSLCommand(
-	distro?: string
+	distro?: string,
+	cwd?: string
 ): ShellInfo {
 	const args: string[] = [];
+	if (cwd) {
+		args.push("--cd", translateToWSLPath(cwd));
+	}
 	if (distro) {
 		args.push("-d", distro);
 	}

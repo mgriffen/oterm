@@ -1,4 +1,4 @@
-import { isWSLShell, IS_WIN } from "../utils/platform";
+import { IS_WIN } from "../utils/platform";
 import { TERM_TYPE, COLOR_TERM } from "../constants";
 
 // node-pty types — loaded dynamically via native-loader
@@ -53,7 +53,7 @@ export function spawnPty(
 		name: TERM_TYPE,
 		cols: options.cols,
 		rows: options.rows,
-		cwd: resolveCwd(options),
+		cwd: options.cwd,
 		env,
 	};
 
@@ -87,21 +87,3 @@ export function spawnPty(
 	};
 }
 
-function resolveCwd(options: SpawnOptions): string {
-	// WSL shells run in Linux filesystem — translate Windows paths
-	if (IS_WIN && isWSLShell(options.shell)) {
-		return translateToWSLPath(options.cwd);
-	}
-	return options.cwd;
-}
-
-function translateToWSLPath(windowsPath: string): string {
-	// Convert C:\Users\foo to /mnt/c/Users/foo
-	const match = windowsPath.match(/^([A-Za-z]):(.*)/);
-	if (match) {
-		const drive = match[1].toLowerCase();
-		const rest = match[2].replace(/\\/g, "/");
-		return `/mnt/${drive}${rest}`;
-	}
-	return windowsPath;
-}
