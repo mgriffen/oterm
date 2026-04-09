@@ -2,7 +2,7 @@ import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import { VIEW_TYPE_TERMINAL, PLUGIN_ID } from "../constants";
 import { TerminalManager } from "./terminal-manager";
 import { loadNodePty } from "./native-loader";
-import { detectShell, buildWSLCommand, resolveDefaultCwd } from "../utils/platform";
+import { detectShell, buildWSLCommand, resolveDefaultCwd, isWSLShell } from "../utils/platform";
 import { TabBar } from "../ui/tab-bar";
 import { SearchBar } from "../ui/search-bar";
 import type OtermPlugin from "../main";
@@ -33,7 +33,7 @@ export class TerminalView extends ItemView {
 	}
 
 	getIcon(): string {
-		return "terminal";
+		return "oterm-icon";
 	}
 
 	async onOpen(): Promise<void> {
@@ -110,7 +110,11 @@ export class TerminalView extends ItemView {
 		const settings = this.plugin.settings;
 
 		if (settings.defaultShell === "auto") {
-			return detectShell();
+			const detected = detectShell();
+			if (isWSLShell(detected.shell)) {
+				return buildWSLCommand(undefined, cwd);
+			}
+			return detected;
 		}
 
 		if (

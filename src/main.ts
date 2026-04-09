@@ -1,5 +1,5 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
-import { VIEW_TYPE_TERMINAL } from "./constants";
+import { addIcon, Plugin, WorkspaceLeaf } from "obsidian";
+import { VIEW_TYPE_TERMINAL, OTERM_ICON_SVG } from "./constants";
 import { OtermSettings, DEFAULT_SETTINGS } from "./settings";
 import { OtermSettingTab } from "./settings-tab";
 import { TerminalView } from "./terminal/terminal-view";
@@ -10,6 +10,8 @@ export default class OtermPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+
+		addIcon("oterm-icon", OTERM_ICON_SVG);
 
 		this.registerView(
 			VIEW_TYPE_TERMINAL,
@@ -82,7 +84,7 @@ export default class OtermPlugin extends Plugin {
 			},
 		});
 
-		this.addRibbonIcon("terminal", "Open terminal", () => {
+		this.addRibbonIcon("oterm-icon", "oterm", () => {
 			this.openTerminal();
 		});
 
@@ -107,6 +109,11 @@ export default class OtermPlugin extends Plugin {
 			active: true,
 		});
 		this.app.workspace.revealLeaf(leaf);
+
+		// Ensure right sidebar is expanded when opening there
+		if (this.settings.openLocation === "right") {
+			(this.app.workspace.rightSplit as unknown as { expand(): void }).expand();
+		}
 	}
 
 	private getActiveTerminalView(): TerminalView | null {
@@ -123,7 +130,7 @@ export default class OtermPlugin extends Plugin {
 				return this.app.workspace.getLeaf("split", "horizontal");
 			}
 			case "right":
-				return this.app.workspace.getRightLeaf(true) ?? this.app.workspace.getLeaf("tab");
+				return this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf("tab");
 			case "tab":
 			default:
 				return this.app.workspace.getLeaf("tab");
