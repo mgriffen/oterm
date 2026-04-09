@@ -2,7 +2,8 @@ import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import { VIEW_TYPE_TERMINAL, PLUGIN_ID } from "../constants";
 import { TerminalManager } from "./terminal-manager";
 import { loadNodePty } from "./native-loader";
-import { detectShell, buildWSLCommand, resolveDefaultCwd, isWSLShell } from "../utils/platform";
+import { resolveDefaultCwd } from "../utils/platform";
+import { validateShell, resolveShellCommand } from "./shell-registry";
 import { TabBar } from "../ui/tab-bar";
 import { SearchBar } from "../ui/search-bar";
 import type OtermPlugin from "../main";
@@ -91,7 +92,18 @@ export class TerminalView extends ItemView {
 			this.plugin.settings.defaultCwd,
 			this.getVaultPath()
 		);
-		const shellInfo = this.resolveShell(cwd);
+
+		const validation = validateShell(this.plugin.settings.defaultShell);
+		if (!validation.valid) {
+			new Notice(`oterm: ${validation.error}`, 10000);
+			return;
+		}
+
+		const shellInfo = resolveShellCommand(
+			this.plugin.settings.defaultShell,
+			this.plugin.settings.shellArgs,
+			cwd
+		);
 
 		this.manager.createSession(this.terminalArea, {
 			shell: shellInfo.shell,
@@ -104,30 +116,6 @@ export class TerminalView extends ItemView {
 
 	toggleSearch(): void {
 		this.searchBar?.toggle();
-	}
-
-	private resolveShell(cwd: string): { shell: string; args: string[] } {
-		const settings = this.plugin.settings;
-
-		if (settings.defaultShell === "auto") {
-			const detected = detectShell();
-			if (isWSLShell(detected.shell)) {
-				return buildWSLCommand(undefined, cwd);
-			}
-			return detected;
-		}
-
-		if (
-			settings.defaultShell === "wsl" ||
-			settings.defaultShell === "wsl.exe"
-		) {
-			return buildWSLCommand(undefined, cwd);
-		}
-
-		return {
-			shell: settings.defaultShell,
-			args: settings.shellArgs,
-		};
 	}
 
 	private getPluginDir(): string {
