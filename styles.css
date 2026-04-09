@@ -1,0 +1,197 @@
+/* oterm container styles */
+
+.oterm-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	width: 100%;
+	overflow: hidden;
+	padding: 0;
+	margin: 0;
+}
+
+.oterm-terminal-area {
+	flex: 1;
+	width: 100%;
+	min-height: 0;
+	overflow: hidden;
+	position: relative;
+}
+
+.oterm-terminal {
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+}
+
+/* Override xterm viewport background to use the terminal's theme background */
+.oterm-terminal .xterm-viewport {
+	background-color: transparent !important;
+}
+
+/* Tab bar */
+
+.oterm-tab-bar {
+	display: flex;
+	align-items: center;
+	background: var(--background-secondary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	height: 32px;
+	flex-shrink: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+}
+
+.oterm-tab-brand {
+    display: flex;
+    align-items: center;
+    padding-left: 8px;
+    padding-right: 4px;
+    color: var(--text-muted);
+    pointer-events: none;
+    flex-shrink: 0;
+}
+
+.oterm-tab-brand svg {
+    width: 16px;
+    height: 16px;
+}
+
+.oterm-tabs {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	overflow-x: auto;
+}
+
+.oterm-tab {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 12px;
+	font-size: 12px;
+	cursor: pointer;
+	white-space: nowrap;
+	color: var(--text-muted);
+	border-right: 1px solid var(--background-modifier-border);
+	user-select: none;
+}
+
+.oterm-tab:hover {
+	background: var(--background-modifier-hover);
+}
+
+.oterm-tab-active {
+	color: var(--text-normal);
+	background: var(--background-primary);
+}
+
+.oterm-tab-label {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 120px;
+}
+
+.oterm-tab-close {
+	display: flex;
+	align-items: center;
+	opacity: 0.5;
+	cursor: pointer;
+}
+
+.oterm-tab-close:hover {
+	opacity: 1;
+}
+
+.oterm-tab-close svg {
+	width: 12px;
+	height: 12px;
+}
+
+.oterm-tab-new {
+	display: flex;
+	align-items: center;
+	padding: 4px 8px;
+	cursor: pointer;
+	opacity: 0.5;
+}
+
+.oterm-tab-new:hover {
+	opacity: 1;
+}
+
+.oterm-tab-new svg {
+	width: 14px;
+	height: 14px;
+}
+
+.oterm-tab-rename {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	border: 1px solid var(--interactive-accent);
+	border-radius: 2px;
+	font-size: 12px;
+	padding: 0 4px;
+	width: 100px;
+	outline: none;
+}
+
+/* Search bar */
+
+.oterm-search-bar {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+	background: var(--background-secondary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	flex-shrink: 0;
+}
+
+.oterm-search-input {
+	flex: 1;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 2px 8px;
+	font-size: 12px;
+	outline: none;
+}
+
+.oterm-search-input:focus {
+	border-color: var(--interactive-accent);
+}
+
+.oterm-search-btn {
+	display: flex;
+	align-items: center;
+	padding: 2px 4px;
+	cursor: pointer;
+	opacity: 0.7;
+	border-radius: 2px;
+}
+
+.oterm-search-btn:hover {
+	opacity: 1;
+	background: var(--background-modifier-hover);
+}
+
+.oterm-search-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Ensure the scrollbar blends with the terminal */
+.oterm-terminal .xterm-viewport::-webkit-scrollbar {
+	width: 10px;
+}
+
+.oterm-terminal .xterm-viewport::-webkit-scrollbar-thumb {
+	background-color: rgba(255, 255, 255, 0.2);
+	border-radius: 5px;
+}
+
+.oterm-terminal .xterm-viewport::-webkit-scrollbar-track {
+	background-color: transparent;
+}
