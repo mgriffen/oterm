@@ -3,7 +3,7 @@
 	"name": "oterm",
 	"version": "0.1.2",
 	"minAppVersion": "1.4.11",
-	"description": "Full terminal emulator for Obsidian — PowerShell, WSL, oh-my-zsh, tmux, powerlevel10k.",
+	"description": "Full terminal emulator powered by xterm.js and node-pty. Supports PowerShell, WSL, zsh, tmux, and CLI tools.",
 	"author": "mgriffen",
 	"authorUrl": "https://github.com/mgriffen",
 	"isDesktopOnly": true
