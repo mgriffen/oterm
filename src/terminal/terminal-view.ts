@@ -65,7 +65,7 @@ export class TerminalView extends ItemView {
 			this.createNewSession();
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "unknown error";
-			new Notice(`oterm: failed to open terminal — ${msg}`, 10000);
+			new Notice(`Oterm: failed to open terminal — ${msg}`, 10000);
 			container.setText(`Terminal failed to start: ${msg}`);
 		}
 	}
@@ -73,7 +73,7 @@ export class TerminalView extends ItemView {
 	async onClose(): Promise<void> {
 		const hasActive = await this.manager.hasActiveProcesses();
 		if (hasActive) {
-			new Notice("oterm: terminal sessions with running processes were closed.", 5000);
+			new Notice("Oterm: terminal sessions with running processes were closed.", 5000);
 		}
 
 		this.resizeObserver?.disconnect();
@@ -95,7 +95,7 @@ export class TerminalView extends ItemView {
 
 		const validation = validateShell(this.plugin.settings.defaultShell);
 		if (!validation.valid) {
-			new Notice(`oterm: ${validation.error}`, 10000);
+			new Notice(`Oterm: ${validation.error}`, 10000);
 			return;
 		}
 

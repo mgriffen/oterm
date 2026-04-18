@@ -14,7 +14,6 @@ export class OtermSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "oterm" });
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
 			text: "Full terminal emulator for Obsidian.",
@@ -44,7 +43,7 @@ export class OtermSettingTab extends PluginSettingTab {
 
 			// System Shells group
 			if (systemPresets.length > 0) {
-				dropdown.addOption("_sep_system", "── System Shells ──");
+				dropdown.addOption("_sep_system", "── system shells ──");
 				for (const preset of systemPresets) {
 					dropdown.addOption(preset.id, preset.name);
 				}
@@ -52,7 +51,7 @@ export class OtermSettingTab extends PluginSettingTab {
 
 			// AI Tools group
 			if (aiPresets.length > 0) {
-				dropdown.addOption("_sep_ai", "── AI Tools ──");
+				dropdown.addOption("_sep_ai", "── AI tools ──");
 				for (const preset of aiPresets) {
 					dropdown.addOption(preset.id, preset.name);
 				}
@@ -130,13 +129,13 @@ export class OtermSettingTab extends PluginSettingTab {
 				});
 			});
 
-		containerEl.createEl("h2", { text: "Appearance" });
+		new Setting(containerEl).setName("Appearance").setHeading();
 
 		// Font family
 		new Setting(containerEl)
 			.setName("Font family")
 			.setDesc(
-				"Use a Nerd Font (e.g. MesloLGS NF) for powerlevel10k support."
+				"Use a nerd font (e.g. Meslolgs nf) for powerlevel10k support."
 			)
 			.addText((text) =>
 				text
@@ -189,7 +188,7 @@ export class OtermSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl("h2", { text: "Advanced" });
+		new Setting(containerEl).setName("Advanced").setHeading();
 
 		// Scrollback
 		new Setting(containerEl)
@@ -209,9 +208,9 @@ export class OtermSettingTab extends PluginSettingTab {
 
 		// WebGL rendering
 		new Setting(containerEl)
-			.setName("GPU-accelerated rendering")
+			.setName("Gpu-accelerated rendering")
 			.setDesc(
-				"Uses WebGL for faster terminal rendering. Disable if you see visual glitches."
+				"Uses webgl for faster terminal rendering. Disable if you see visual glitches."
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -243,7 +242,7 @@ export class OtermSettingTab extends PluginSettingTab {
 		}
 		const result = validateShell(shellId);
 		if (result.valid) {
-			el.setText("✓ Detected");
+			el.setText("✓ detected");
 			el.className = "oterm-shell-status oterm-shell-detected";
 		} else {
 			el.setText("⚠ Not found");

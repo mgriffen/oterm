@@ -13,11 +13,10 @@ export class SearchBar {
 		this.containerEl = parentEl.createDiv({ cls: "oterm-search-bar" });
 		this.containerEl.hide();
 
-		this.inputEl = document.createElement("input");
-		this.inputEl.type = "text";
-		this.inputEl.placeholder = "Search...";
-		this.inputEl.className = "oterm-search-input";
-		this.containerEl.appendChild(this.inputEl);
+		this.inputEl = this.containerEl.createEl("input", {
+			cls: "oterm-search-input",
+			attr: { type: "text", placeholder: "Search..." },
+		});
 
 		const prevBtn = this.containerEl.createDiv({ cls: "oterm-search-btn" });
 		setIcon(prevBtn, "chevron-up");

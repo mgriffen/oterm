@@ -4,10 +4,12 @@ import {
 	DEFAULT_SCROLLBACK,
 } from "./constants";
 
+export type DefaultCwdMode = "vault" | "home" | (string & {});
+
 export interface OtermSettings {
 	defaultShell: string;
 	shellArgs: string[];
-	defaultCwd: "vault" | "home" | string;
+	defaultCwd: DefaultCwdMode;
 	fontFamily: string;
 	fontSize: number;
 	scrollback: number;

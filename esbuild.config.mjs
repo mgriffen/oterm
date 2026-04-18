@@ -1,8 +1,29 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import { readFile, writeFile } from "fs/promises";
 
 const prod = process.argv[2] === "production";
+
+async function buildStyles() {
+	const [xtermCss, otermCss] = await Promise.all([
+		readFile("node_modules/@xterm/xterm/css/xterm.css", "utf8"),
+		readFile("src/oterm.css", "utf8"),
+	]);
+	await writeFile(
+		"styles.css",
+		`/* Bundled xterm.css — see node_modules/@xterm/xterm/css/xterm.css */\n${xtermCss}\n\n/* oterm plugin styles */\n${otermCss}`
+	);
+}
+
+const stylesPlugin = {
+	name: "oterm-styles",
+	setup(build) {
+		build.onStart(async () => {
+			await buildStyles();
+		});
+	},
+};
 
 const context = await esbuild.context({
 	banner: {
@@ -18,15 +39,13 @@ const context = await esbuild.context({
 		"node-pty",
 		...builtins,
 	],
-	loader: {
-		".css": "text",
-	},
 	format: "cjs",
 	target: "es2018",
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
 	outfile: "main.js",
+	plugins: [stylesPlugin],
 });
 
 if (prod) {

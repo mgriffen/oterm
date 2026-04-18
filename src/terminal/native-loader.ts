@@ -5,6 +5,7 @@ import { createWriteStream } from "fs";
 import * as https from "https";
 import * as path from "path";
 import * as yauzl from "yauzl";
+import type { IPty, IPtyForkOptions, IWindowsPtyForkOptions } from "node-pty";
 import { getPlatformTriple, IS_WIN } from "../utils/platform";
 
 const GITHUB_OWNER = "mgriffen";
@@ -14,9 +15,20 @@ const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
 
-// node-pty is loaded at runtime from prebuilt binaries, not bundled
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type NodePtyModule = any;
+export interface NodePtyModule {
+	spawn(
+		file: string,
+		args: string[] | string,
+		options: IPtyForkOptions | IWindowsPtyForkOptions
+	): IPty;
+}
+
+// node-pty is loaded at runtime from prebuilt binaries via Electron's renderer
+// require, not bundled by esbuild. Accessing require through the window object
+// avoids the static import that would otherwise pull node-pty into the bundle.
+function electronRequire(id: string): unknown {
+	return (activeWindow as unknown as { require: (id: string) => unknown }).require(id);
+}
 
 let cachedModule: NodePtyModule | null = null;
 let downloadPromise: Promise<void> | null = null;
@@ -60,13 +72,12 @@ export async function loadNodePty(pluginDir: string): Promise<NodePtyModule> {
 
 	let pty: NodePtyModule;
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		pty = require(modulePath) as NodePtyModule;
+		pty = electronRequire(modulePath) as NodePtyModule;
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
 		if (msg.includes("NODE_MODULE_VERSION")) {
 			throw new Error(
-				"oterm: binary is incompatible with this Obsidian version. " +
+				"Oterm: binary is incompatible with this Obsidian version. " +
 				"Please update the plugin or reinstall."
 			);
 		}
@@ -75,7 +86,7 @@ export async function loadNodePty(pluginDir: string): Promise<NodePtyModule> {
 
 	if (typeof pty.spawn !== "function") {
 		throw new Error(
-			"oterm: native module loaded but does not export spawn(). " +
+			"Oterm: native module loaded but does not export spawn(). " +
 			"The binary may be incompatible. Try reinstalling the plugin."
 		);
 	}
@@ -88,7 +99,7 @@ async function downloadAndExtract(
 	pluginDir: string,
 	triple: string
 ): Promise<void> {
-	const notice = new Notice("oterm: downloading terminal binary...", 0);
+	const notice = new Notice("Oterm: downloading terminal binary...", 0);
 	const targetDir = path.join(pluginDir, NATIVE_DIR_NAME, triple);
 
 	try {
@@ -97,32 +108,32 @@ async function downloadAndExtract(
 		const baseUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${version}`;
 
 		// Download checksums first
-		notice.setMessage("oterm: verifying binary integrity...");
+		notice.setMessage("Oterm: verifying binary integrity...");
 		const checksumsData = await httpGetWithRetry(`${baseUrl}/checksums.json`);
-		const checksums = JSON.parse(checksumsData.toString("utf-8"));
-		const expectedHash = checksums[zipName];
+		const checksums = JSON.parse(checksumsData.toString("utf-8")) as Record<string, string>;
+		const expectedHash: string | undefined = checksums[zipName];
 		if (!expectedHash) {
 			throw new Error(
-				`oterm: no checksum entry for ${zipName}. ` +
+				`Oterm: no checksum entry for ${zipName}. ` +
 				"Cannot verify binary integrity."
 			);
 		}
 
 		// Download zip
-		notice.setMessage("oterm: downloading terminal binary...");
+		notice.setMessage("Oterm: downloading terminal binary...");
 		const zipData = await httpGetWithRetry(`${baseUrl}/${zipName}`);
 
 		// Verify checksum
 		const actualHash = createHash("sha256").update(zipData).digest("hex");
 		if (actualHash !== expectedHash) {
 			throw new Error(
-				`oterm: checksum mismatch for ${zipName}. ` +
+				`Oterm: checksum mismatch for ${zipName}. ` +
 				`Expected ${expectedHash}, got ${actualHash}.`
 			);
 		}
 
 		// Extract zip
-		notice.setMessage("oterm: installing terminal binary...");
+		notice.setMessage("Oterm: installing terminal binary...");
 
 		// Clean up any partial previous extraction
 		if (await fileExists(targetDir)) {
@@ -145,15 +156,51 @@ async function downloadAndExtract(
 			}
 		}
 
-		notice.setMessage("oterm: terminal binary installed.");
-		setTimeout(() => notice.hide(), 3000);
+		notice.setMessage("Oterm: terminal binary installed.");
+		activeWindow.setTimeout(() => notice.hide(), 3000);
 	} catch (err) {
 		notice.hide();
 		try { await rm(targetDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
 		const msg = err instanceof Error ? err.message : "unknown error";
-		new Notice(`oterm: failed to download binary — ${msg}`, 10000);
+		new Notice(`Oterm: failed to download binary — ${msg}`, 10000);
 		throw err;
 	}
+}
+
+async function handleEntry(
+	zipfile: yauzl.ZipFile,
+	entry: yauzl.Entry,
+	targetDir: string
+): Promise<void> {
+	if (entry.fileName.endsWith("/")) {
+		zipfile.readEntry();
+		return;
+	}
+
+	const normalized = path.normalize(entry.fileName);
+	if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
+		zipfile.readEntry();
+		return;
+	}
+	const outputPath = path.join(targetDir, normalized);
+	const parentDir = path.dirname(outputPath);
+	await mkdir(parentDir, { recursive: true });
+
+	await new Promise<void>((resolve, reject) => {
+		zipfile.openReadStream(entry, (streamErr, readStream) => {
+			if (streamErr || !readStream) {
+				reject(streamErr ?? new Error("Failed to read zip entry"));
+				return;
+			}
+			const writeStream = createWriteStream(outputPath);
+			readStream.pipe(writeStream);
+			writeStream.on("finish", () => {
+				zipfile.readEntry();
+				resolve();
+			});
+			writeStream.on("error", reject);
+		});
+	});
 }
 
 function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
@@ -166,48 +213,8 @@ function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
 
 			zipfile.readEntry();
 
-			zipfile.on("entry", async (entry: yauzl.Entry) => {
-				// Skip directories
-				if (entry.fileName.endsWith("/")) {
-					zipfile.readEntry();
-					return;
-				}
-
-				// Preserve directory structure but guard against path traversal
-				const normalized = path.normalize(entry.fileName);
-				if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
-					zipfile.readEntry();
-					return;
-				}
-				const outputPath = path.join(targetDir, normalized);
-				// Ensure parent directory exists
-				const parentDir = path.dirname(outputPath);
-				try {
-					await mkdir(parentDir, { recursive: true });
-				} catch {
-					reject(new Error(`Failed to create directory: ${parentDir}`));
-					return;
-				}
-
-				zipfile.openReadStream(entry, (streamErr, readStream) => {
-					if (streamErr || !readStream) {
-						zipfile.close();
-						reject(streamErr ?? new Error("Failed to read zip entry"));
-						return;
-					}
-
-					const writeStream = createWriteStream(outputPath);
-					readStream.pipe(writeStream);
-
-					writeStream.on("finish", () => {
-						zipfile.readEntry();
-					});
-
-					writeStream.on("error", (e) => {
-						zipfile.close();
-						reject(e);
-					});
-				});
+			zipfile.on("entry", (entry: yauzl.Entry) => {
+				void handleEntry(zipfile, entry, targetDir).catch(reject);
 			});
 
 			zipfile.on("end", resolve);
@@ -219,14 +226,14 @@ function extractZip(zipData: Buffer, targetDir: string): Promise<void> {
 async function getPluginVersion(pluginDir: string): Promise<string> {
 	const manifestPath = path.join(pluginDir, "manifest.json");
 	try {
-		const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+		const manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as { version?: string };
 		if (!manifest.version) {
 			throw new Error("no version field in manifest.json");
 		}
 		return manifest.version;
 	} catch (err) {
 		throw new Error(
-			`oterm: cannot determine plugin version — ${err instanceof Error ? err.message : "manifest.json unreadable"}. ` +
+			`Oterm: cannot determine plugin version — ${err instanceof Error ? err.message : "manifest.json unreadable"}. ` +
 			"Reinstall the plugin."
 		);
 	}
@@ -240,11 +247,11 @@ async function httpGetWithRetry(url: string): Promise<Buffer> {
 		} catch (err) {
 			lastError = err instanceof Error ? err : new Error(String(err));
 			if (attempt < MAX_RETRIES) {
-				await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+				await new Promise((r) => activeWindow.setTimeout(r, RETRY_DELAY_MS));
 			}
 		}
 	}
-	throw lastError;
+	throw lastError ?? new Error(`Oterm: request failed for ${url}`);
 }
 
 function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
@@ -263,7 +270,7 @@ function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
 				}
 				if (!res.headers.location.startsWith("https://")) {
 					res.resume();
-					reject(new Error("oterm: redirect to non-HTTPS URL rejected"));
+					reject(new Error("Oterm: redirect to non-HTTPS URL rejected"));
 					return;
 				}
 				res.resume();
@@ -287,7 +294,7 @@ function httpGet(url: string, redirectsLeft = 5): Promise<Buffer> {
 				if (totalBytes > MAX_DOWNLOAD_BYTES && !settled) {
 					settled = true;
 					res.destroy();
-					reject(new Error(`oterm: download exceeds ${MAX_DOWNLOAD_BYTES / 1024 / 1024}MB limit — aborting`));
+					reject(new Error(`Oterm: download exceeds ${MAX_DOWNLOAD_BYTES / 1024 / 1024}MB limit — aborting`));
 					return;
 				}
 				chunks.push(chunk);

@@ -67,27 +67,19 @@ export class TabBar {
 		if (this.manager.count() > 1) {
 			const closeBtn = tabEl.createSpan({ cls: "oterm-tab-close" });
 			setIcon(closeBtn, "x");
-			closeBtn.addEventListener("click", async (e) => {
+			closeBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				const hasActive = await this.manager.sessionHasActiveProcess(entry.id);
-				if (hasActive) {
-					const confirmed = await new ConfirmModal(
-						this.app,
-						"Close terminal?",
-						"This terminal session has running processes. Close anyway?"
-					).openAndWait();
-					if (!confirmed) return;
-				}
-				this.manager.closeSession(entry.id);
+				void this.closeWithConfirm(entry.id);
 			});
 		}
 	}
 
 	private startRename(labelEl: HTMLSpanElement, entry: SessionEntry): void {
-		const input = document.createElement("input");
-		input.type = "text";
-		input.value = entry.name;
-		input.className = "oterm-tab-rename";
+		labelEl.empty();
+		const input = labelEl.createEl("input", {
+			cls: "oterm-tab-rename",
+			attr: { type: "text", value: entry.name },
+		});
 
 		const finish = () => {
 			const newName = input.value.trim();
@@ -106,13 +98,24 @@ export class TabBar {
 			}
 		});
 
-		labelEl.empty();
-		labelEl.appendChild(input);
 		input.focus();
 		input.select();
 	}
 
 	destroy(): void {
 		this.containerEl.remove();
+	}
+
+	private async closeWithConfirm(id: string): Promise<void> {
+		const hasActive = await this.manager.sessionHasActiveProcess(id);
+		if (hasActive) {
+			const confirmed = await new ConfirmModal(
+				this.app,
+				"Close terminal?",
+				"This terminal session has running processes. Close anyway?"
+			).openAndWait();
+			if (!confirmed) return;
+		}
+		this.manager.closeSession(id);
 	}
 }

@@ -68,7 +68,7 @@ export default class OtermPlugin extends Plugin {
 				if (!checking) {
 					const activeId = view.manager.getActiveId();
 					if (activeId) {
-						this.closeSessionWithConfirm(view, activeId);
+						void this.closeSessionWithConfirm(view, activeId);
 					}
 				}
 				return true;
@@ -86,8 +86,8 @@ export default class OtermPlugin extends Plugin {
 			},
 		});
 
-		this.addRibbonIcon("oterm-icon", "oterm", () => {
-			this.openTerminal();
+		this.addRibbonIcon("oterm-icon", "Oterm", () => {
+			void this.openTerminal();
 		});
 
 		this.addSettingTab(new OtermSettingTab(this.app, this));
@@ -97,7 +97,7 @@ export default class OtermPlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			if (this.app.workspace.getLeavesOfType(VIEW_TYPE_TERMINAL).length === 0) {
 				const leaf = this.app.workspace.getRightLeaf(false);
-				leaf?.setViewState({
+				void leaf?.setViewState({
 					type: VIEW_TYPE_TERMINAL,
 					active: false,
 				});
@@ -105,15 +105,16 @@ export default class OtermPlugin extends Plugin {
 		});
 	}
 
-	async onunload(): Promise<void> {
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_TERMINAL);
+	onunload(): void {
+		// Obsidian detaches the plugin's views automatically; explicit detach here
+		// would reset the leaf to its default location on next load.
 	}
 
 	async openTerminal(): Promise<void> {
 		// If a terminal view already exists, just reveal it
 		const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_TERMINAL);
 		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
+			await this.app.workspace.revealLeaf(existing[0]);
 			return;
 		}
 
@@ -122,7 +123,7 @@ export default class OtermPlugin extends Plugin {
 			type: VIEW_TYPE_TERMINAL,
 			active: true,
 		});
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 
 		// Ensure right sidebar is expanded when opening there
 		if (this.settings.openLocation === "right") {
@@ -152,11 +153,8 @@ export default class OtermPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			await this.loadData()
-		);
+		const saved = (await this.loadData()) as Partial<OtermSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {});
 	}
 
 	async saveSettings(): Promise<void> {

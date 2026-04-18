@@ -44,7 +44,7 @@ export function buildWSLCommand(
 }
 
 export function resolveDefaultCwd(
-	mode: "vault" | "home" | string,
+	mode: "vault" | "home" | (string & {}),
 	vaultPath: string
 ): string {
 	switch (mode) {

@@ -3,18 +3,6 @@ import { loadAddons, disposeAddons, LoadedAddons } from "./addons";
 import { spawnPty, PtyHandle, SpawnOptions } from "./pty-bridge";
 import { OtermSettings } from "../settings";
 
-// Imported as text via esbuild loader — see esbuild.config.mjs
-import xtermCssText from "@xterm/xterm/css/xterm.css";
-
-function injectXtermCss(): void {
-	if (document.getElementById("oterm-xterm-css")) return;
-
-	const style = document.createElement("style");
-	style.id = "oterm-xterm-css";
-	style.textContent = xtermCssText;
-	document.head.appendChild(style);
-}
-
 export interface SessionOptions {
 	shell: string;
 	args: string[];
@@ -33,8 +21,6 @@ export class TerminalSession {
 		private container: HTMLElement,
 		private options: SessionOptions
 	) {
-		injectXtermCss();
-
 		this.terminal = new Terminal({
 			fontFamily: options.settings.fontFamily,
 			fontSize: options.settings.fontSize,
