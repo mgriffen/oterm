@@ -245,7 +245,7 @@ export class OtermSettingTab extends PluginSettingTab {
 			el.setText("✓ detected");
 			el.className = "oterm-shell-status oterm-shell-detected";
 		} else {
-			el.setText("⚠ Not found");
+			el.setText("⚠ not found");
 			el.className = "oterm-shell-status oterm-shell-missing";
 		}
 	}

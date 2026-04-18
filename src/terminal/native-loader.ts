@@ -105,7 +105,7 @@ async function downloadAndExtract(
 	try {
 		const version = await getPluginVersion(pluginDir);
 		const zipName = `node-pty-${triple}.zip`;
-		const baseUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${version}`;
+		const baseUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${version}`;
 
 		// Download checksums first
 		notice.setMessage("Oterm: verifying binary integrity...");
