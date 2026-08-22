@@ -1,46 +1,63 @@
 # oterm
 
-Full terminal emulator for Obsidian. Powered by the same technology as VS Code's terminal (xterm.js + node-pty).
+> [!WARNING]
+> **oterm is no longer maintained, and has been removed from the Obsidian community store.**
+>
+> If you already have it installed it will keep working — nothing is being taken away from you — but it will receive no further updates, fixes, or compatibility work.
+>
+> **Please switch to one of these instead. Both are actively maintained and do more than oterm ever did.**
+>
+> | If you want… | Use | |
+> |---|---|---|
+> | A terminal inside Obsidian | **[Lean Terminal](https://github.com/sdkasper/lean-obsidian-terminal)** | Same xterm.js + node-pty foundation, plus session persistence, themes, tab management, vault integration, and startup commands |
+> | To run Claude Code, Codex or Gemini CLI in your vault | **[Agent Client](https://github.com/RAIT-09/obsidian-agent-client)** | Full ACP client with note mentions, permission prompts, and multi-agent sessions |
+>
+> Thanks to everyone who installed it. — [@mgriffen](https://github.com/mgriffen)
 
-Supports PowerShell, WSL, zsh, oh-my-zsh, tmux, powerlevel10k, and all rich CLI tools — including Claude Code.
+---
 
-## Features
+## What this was
+
+A full terminal emulator for Obsidian, powered by the same technology as VS Code's terminal (xterm.js + node-pty). It supported PowerShell, WSL, zsh, oh-my-zsh, tmux, powerlevel10k, and rich CLI tools.
+
+It was built over ten days in April 2026, published to the community store, and then — honestly — forgotten about. By the time I looked again, [Lean Terminal](https://github.com/sdkasper/lean-obsidian-terminal) had been started two weeks *earlier* on the same stack and had gone considerably further. There is no good reason to run two of these, so this one stops.
+
+### What it did
 
 - **Full terminal emulation** — xterm.js v6 with WebGL rendering, truecolor, Unicode 11
-- **Multiple tabs** — create, switch, close, rename (double-click) terminal sessions
+- **Multiple tabs** — create, switch, close, rename (double-click)
 - **Cross-platform** — Windows (PowerShell, Git Bash, WSL), macOS (zsh, bash), Linux (zsh, bash)
 - **Shell presets** — auto-detects available shells, categorized dropdown in settings
 - **Find in terminal** — search through terminal output with next/previous navigation
 - **Sidebar integration** — docks in the right sidebar with a persistent icon
 - **Clickable links** — URLs in terminal output are clickable
-- **Catppuccin Mocha theme** — dark theme that integrates with Obsidian's UI
+- **Verified native binaries** — mandatory SHA256 checksum verification, HTTPS-only, redirect-downgrade rejection
 
-## Installation
+## For anyone building something similar
 
-### BRAT (recommended for beta)
+The one hard-won thing worth passing on:
 
-1. Install [BRAT](https://github.com/TfTHacker/obsidian42-brat) from Community Plugins
-2. Open BRAT settings, click "Add Beta Plugin"
-3. Enter: `mgriffen/oterm`
-4. Enable oterm in Community Plugins
+> **Obsidian's Electron blocks ConPTY worker threads.** On Windows the terminal must run with `useConpty: false` and fall back to winpty. Anyone attempting a PTY-backed Obsidian plugin will hit this.
 
-### Manual
+The rest of the shape, if useful: xterm.js v6 + node-pty v1.1 (the VS Code pairing), esbuild bundling xterm.js, node-pty loaded at runtime from prebuilt binaries across five targets (`win32-x64`, `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`), macOS x64 cross-compiled on an ARM runner with `--arch x64`. Release tags must **not** carry a `v` prefix, or the community store won't match them — and if your native-binary workflow triggers on `v*` only, your releases will silently ship without binaries.
+
+Source is MIT. Take whatever is useful.
+
+## Existing installs
+
+Nothing to do. Your copy keeps working.
+
+If you want to remove it: **Settings → Community plugins → oterm → Uninstall.**
+
+## Manual install (archival)
+
+The releases remain downloadable for anyone who needs them.
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/mgriffen/oterm/releases/latest)
 2. Create `<vault>/.obsidian/plugins/oterm/` and place the files there
 3. Enable oterm in Community Plugins
 
-## First Launch
-
-When you first open a terminal, oterm downloads a platform-specific native binary (~20-400 KB) from GitHub Releases. This is a one-time download — subsequent opens use the cached binary.
-
-If you're behind a corporate proxy or firewall, you can download the binary manually:
-
-1. Go to the [latest release](https://github.com/mgriffen/oterm/releases/latest)
-2. Download `node-pty-<platform>.zip` for your platform
-3. Extract to `<vault>/.obsidian/plugins/oterm/native/<platform>/`
-
-Platform values: `win32-x64`, `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`
+On first terminal open, oterm downloads a platform-specific native binary (~20–400 KB) from GitHub Releases. Behind a proxy or firewall, fetch it manually: download `node-pty-<platform>.zip` from the release and extract to `<vault>/.obsidian/plugins/oterm/native/<platform>/`.
 
 ## Commands
 
@@ -55,24 +72,15 @@ Platform values: `win32-x64`, `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-
 
 ## Settings
 
-- **Shell** — choose from detected shells (PowerShell, WSL, Git Bash, zsh, bash, fish) or AI tools (Claude Code, Aider)
-- **Font family** — default: MesloLGS NF, Consolas, Courier New
-- **Font size** — default: 14
-- **Cursor style** — block, underline, or bar
-- **WebGL rendering** — hardware-accelerated rendering (disable if you see visual artifacts)
+**Shell** (detected presets or a custom path) · **Working directory** (vault root or home) · **Open location** (right sidebar, bottom panel, editor tab) · **Font family** (a Nerd Font is needed for powerlevel10k) · **Font size** · **Cursor style** · **Cursor blink** · **Scrollback** · **WebGL rendering** · **Copy on select**
 
-## Network Disclosure
+## Network disclosure
 
-This plugin makes network requests to **GitHub** (`github.com` and `objects.githubusercontent.com`) to download prebuilt native binaries on first terminal open. Specifically:
+oterm made network requests to **GitHub** (`github.com`, `objects.githubusercontent.com`) to download prebuilt native binaries on first terminal open — `checksums.json` and `node-pty-<platform>.zip`. No telemetry, no analytics, no other requests. All downloads over HTTPS with mandatory checksum verification.
 
-- `checksums.json` — SHA256 hashes for integrity verification
-- `node-pty-<platform>.zip` — platform-specific native terminal binary
+## Desktop only
 
-No telemetry, analytics, or other network requests are made. All downloads are over HTTPS with checksum verification.
-
-## Desktop Only
-
-This plugin requires Node.js APIs (node-pty) and only works on desktop platforms (Windows, macOS, Linux). It will not load on mobile.
+Requires Node.js APIs (node-pty). Does not load on mobile.
 
 ## License
 
